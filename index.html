@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ダイアトニック & ギターフォーム + ピアノロール（読みやすさ改良）</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root {
+    --bg: #0b0e12;
+    --panel: #141a21;
+    --text: #e6edf3;
+    --accent: #ff4d4f;
+    --muted: #8b949e;
+    --grid: #2a3036;
+    --dotText: #0b0e12;
+    --ct: #ff6b6b;
+    --ok: #3ddc97;
+    --mid: #ffd166;
+    --avoid: #ff4d4f;
+  }
+  html, body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans JP", sans-serif; }
+  h1 { font-size: 1.2rem; margin: 12px 0; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 12px; }
+  .controls { display:grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap:10px; background:var(--panel); padding:12px; border:1px solid var(--grid); border-radius:12px; }
+  label { font-size:.9rem; color: var(--muted); display:block; margin-bottom:6px; }
+  select,button { width:100%; padding:8px; border-radius:8px; border:1px solid var(--grid); background:#0f141a; color:var(--text); }
+  button { cursor:pointer; background:var(--accent); border-color:transparent; font-weight:700; }
+  button.secondary { background:#0f141a; border:1px solid var(--grid); }
+  .out { margin-top: 16px; display:grid; grid-template-columns:1fr; gap:12px; }
+  .row { background:var(--panel); border:1px solid var(--grid); border-radius:12px; padding:12px; }
+  .head { display:flex; gap:12px; align-items:baseline; flex-wrap:wrap; }
+  .deg { font-weight:800; color:var(--accent); min-width:3ch; }
+  .chname { font-weight:700; }
+  .badge { font-size:12px; color: var(--muted); }
+  .forms { display:grid; grid-template-columns: repeat(auto-fit,minmax(320px,1fr)); gap:12px; margin-top:10px; }
+  .diagram { background:#0f141a; border:1px solid var(--grid); border-radius:10px; padding:6px; }
+  .nut { stroke: #ddd; stroke-width: 6; }
+  .fret { stroke: var(--grid); stroke-width: 2; }
+  .string { stroke: var(--grid); stroke-width: 2; }
+  .dot { fill: var(--accent); }
+  .xmark, .posLabel, .axisLabel { font-size: 12px; fill: var(--muted); }
+  .dotText { fill: var(--dotText); font-weight: 800; font-size: 10px; text-anchor: middle; dominant-baseline: central; }
+
+  /* Piano roll */
+  .piano { background:#0f141a; border:1px solid var(--grid); border-radius:10px; padding:6px; }
+  .pr-title { font-size: 12px; color: var(--muted); margin: 4px 0 6px; }
+  .noteLabel { fill: #ffffff; font-size: 11px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; }
+  .keyLine { stroke: #222831; stroke-width: 1; }
+  .octLine { stroke: #36454f; stroke-width: 2; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>スケール→ダイアトニック（度数＆コード名）＋ ギター図（回転/度数＆テンション）＋ ピアノロール（読みやすさ改良）</h1>
+  <div class="controls">
+    <div>
+      <label for="keySel">キー</label>
+      <select id="keySel"></select>
+    </div>
+    <div>
+      <label for="modeSel">スケール種</label>
+      <select id="modeSel">
+        <option value="major">メジャー</option>
+        <option value="minor">ナチュラル・マイナー</option>
+      </select>
+    </div>
+    <div>
+      <label for="chSel">コード種</label>
+      <select id="chSel">
+        <option value="triad">トライアト</option>
+        <option value="7th" selected>7th</option>
+        <option value="9th">9th</option>
+        <option value="11th">11th</option>
+        <option value="13th">13th</option>
+      </select>
+    </div>
+    <div>
+      <label for="degMode">度数表示モード</label>
+      <select id="degMode">
+        <option value="basic">基本</option>
+        <option value="tension">テンション優先</option>
+        <option value="both" selected>両方</option>
+      </select>
+    </div>
+    <div>
+      <label for="colorMode">色分け</label>
+      <select id="colorMode">
+        <option value="none">しない</option>
+        <option value="diatonic" selected>ダイアトニック可否</option>
+        <option value="mode">モード推奨</option>
+      </select>
+    </div>
+    <div>
+      <label for="enhSel">表記</label>
+      <select id="enhSel">
+        <option value="auto" selected>自動（♯↔♭）</option>
+        <option value="sharp">強制♯</option>
+        <option value="flat">強制♭</option>
+      </select>
+    </div>
+    <div>
+      <label for="capo">カポ（0=なし）</label>
+      <select id="capo"></select>
+    </div>
+    <div style="align-self:end;display:flex;gap:8px;">
+      <button id="renderBtn">表示／更新</button>
+      <button class="secondary" id="posBtn" title="押すごとに別のCAGEDベース形へ">別フォーム</button>
+    </div>
+  </div>
+
+  <div class="out" id="output"></div>
+  <div class="badge">ピアノロールは：文字色=白、バー間隔=拡大（バー高さ据え置き）、文字はバー内に収まるよう調整。</div>
+</div>
+
+<script>
+(() => {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(()=>{});
+    });
+  }
+
+  const NOTES_SHARP = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+  const NOTES_FLAT  = ["C","Db","D","Eb","E","F","Gb","G","Ab","A","Bb","B"];
+  const SHARP_KEYS = new Set(["G","D","A","E","B","F#","C#"]);
+  const FLAT_KEYS  = new Set(["F","Bb","Eb","Ab","Db","Gb","Cb"]);
+  const KEY_ORDER = ["C","G","D","A","E","B","F#","C#","F","Bb","Eb","Ab","Db","Gb","Cb"];
+  const OPEN_STR_SHARP = [4,9,2,7,11,4];
+  const clamp12 = v => ((v % 12) + 12) % 12;
+
+  function idxOf(n){ let i=NOTES_SHARP.indexOf(n); return (i!==-1)? i : NOTES_FLAT.indexOf(n); }
+  function nameFromIdx(i,p){ return (p==="flat"? NOTES_FLAT[clamp12(i)] : NOTES_SHARP[clamp12(i)]); }
+  function enhPref(key, setting){ if (setting==="sharp") return "sharp"; if (setting==="flat") return "flat"; if (SHARP_KEYS.has(key)) return "sharp"; if (FLAT_KEYS.has(key)) return "flat"; return "sharp"; }
+  function buildScale(rootIdx, mode){ const steps=(mode==="major")?[2,2,1,2,2,2,1]:[2,1,2,2,1,2,2]; const arr=[rootIdx]; for(let s of steps.slice(0,6)) arr.push((arr[arr.length-1]+s)%12); return arr; }
+  function degreeQual(mode){ return (mode==="major")? ["maj7","m7","m7","maj7","7","m7","m7b5"] : ["m7","m7b5","maj7","m7","m7","maj7","7"]; }
+  function degreeRoman(mode){ return (mode==="major")? ["I","ii","iii","IV","V","vi","vii°"] : ["i","ii°","III","iv","v","VI","VII"]; }
+  function chordLabel(rootIdx, qual, pref){ const r=nameFromIdx(rootIdx,pref); const map={"":"", "m":"m", "dim":"dim", "maj7":"maj7", "m7":"m7", "7":"7", "m7b5":"m7♭5"}; return r + (map[qual]||""); }
+  function labelBasic(semi){ const m={0:"R",1:"♭2",2:"2",3:"m3",4:"M3",5:"4",6:"♭5",7:"5",8:"♯5",9:"6",10:"m7",11:"M7"}; return m[clamp12(semi)] ?? "?"; }
+  function labelTension(semi){ const m={0:"R",1:"♭9",2:"9",3:"m3",4:"M3",5:"11",6:"#11/♭5",7:"5",8:"♭13/♯5",9:"13",10:"m7",11:"M7"}; return m[clamp12(semi)] ?? "?"; }
+  function labelBoth(semi){ const b=labelBasic(semi), t=labelTension(semi); return (b===t)? b : `${t}(${b})`; }
+  function labelForSemi(semi, mode){ if (mode==="basic")return labelBasic(semi); if (mode==="tension")return labelTension(semi); return labelBoth(semi); }
+
+  const OPEN_SHAPES = {
+    "C":[null,3,2,0,1,0],"A":[null,0,2,2,2,0],"G":[3,2,0,0,0,3],"E":[0,2,2,1,0,0],"D":[null,null,0,2,3,2],"F":[1,3,3,2,1,1],
+    "Am":[null,0,2,2,1,0],"Em":[0,2,2,0,0,0],"Dm":[null,null,0,2,3,1],
+    "A7":[null,0,2,0,2,0],"E7":[0,2,0,1,0,0],"D7":[null,null,0,2,1,2],"G7":[3,2,0,0,0,1],"C7":[null,3,2,3,1,0],"B7":[2,2,1,2,0,2],
+    "Cmaj7":[null,3,2,0,0,0],"Amaj7":[null,0,2,1,2,0],"Emaj7":[0,2,1,1,0,0],"Dmaj7":[null,null,0,2,2,2],"Fmaj7":[1,3,3,2,1,0],"Gmaj7":[3,5,4,4,3,2],
+    "Am7":[null,0,2,0,1,0],"Em7":[0,2,0,0,0,0],"Dm7":[null,null,0,2,1,1]
+  };
+  function barreE_Major(r){ return [r, r+2, r+2, r+1, r, r]; }
+  function barreE_Minor(r){ return [r, r+2, r+2, r, r, r]; }
+  function barreE_Dom7(r){ return [r, r+2, r, r+1, r, r]; }
+  function barreE_Maj7(r){ return [r, r+2, r+1, r+1, r, r]; }
+  function barreE_m7(r){  return [r, r+2, r, r, r, r]; }
+  function barreE_m7b5(r){return [r, r+1, r, r+1, r, r]; }
+  function barreE_dim(r){ return [r, r+1, r-1, r, r-1, r]; }
+  function barreA_Major(r){ return [null, r, r+2, r+2, r+2, r]; }
+  function barreA_Minor(r){ return [null, r, r+2, r+2, r+1, r]; }
+  function barreA_Dom7(r){ return [null, r, r+2, r,   r+2, r]; }
+  function barreA_Maj7(r){ return [null, r, r+2, r+1, r+2, r]; }
+  function barreA_m7(r){  return [null, r, r+2, r,   r+1, r]; }
+  function barreA_m7b5(r){return [null, r, r+1, r,   r+1, r]; }
+  function barreA_dim(r){ return [null, r, r+1, r-1, r+1, r-1]; }
+
+  function findFretForRoot(rootIdx, string6=6, prefer=3){
+    let best=null, diff=999;
+    for(let f=1; f<=12; f++){
+      const si = 6 - string6;
+      const note = (OPEN_STR_SHARP[si] + f) % 12;
+      if (note === rootIdx){
+        const d = Math.abs(f - prefer);
+        if (d < diff){ diff = d; best = f; }
+      }
+    }
+    return best ?? 1;
+  }
+  function applyCapo(shape, capo){ return shape.map(f => f===null? null : (f===0? 0 : f+capo)); }
+  function noteAt(sf6idx, fret, capo){ const openIdx=OPEN_STR_SHARP[sf6idx]; return ((openIdx + (fret||0) + (capo||0))%12+12)%12; }
+
+  function modeAdvice(degreeIndex, qual, semi){
+    const mode = ["ion","dor","phr","lyd","mix","aeo","loc"][degreeIndex];
+    const p = ((semi%12)+12)%12;
+    const okSet = {
+      ion: new Set([2,9,7,11,0]), dor: new Set([2,5,9,7,10,0]), phr: new Set([1,5,8,10,0]),
+      lyd: new Set([2,6,9,7,11,0]), mix: new Set([2,9,7,10,0]), aeo: new Set([2,5,8,10,0]), loc: new Set([1,5,8,10,0])
+    }[mode];
+    if (okSet && okSet.has(p)) return "ok";
+    if ((mode==="ion"||mode==="mix") && p===5) return "mid";
+    return "avoid";
+  }
+
+  function renderChordDiagram(title, frets, labels, colorLabels, capo){
+    const used = frets.filter(f=>f!==null);
+    const minPos = used.length? Math.min(...used.filter(f=>f>0)) || 1 : 1;
+    const maxPos = used.length? Math.max(...used) : 5;
+    let startF = (minPos<=1 && capo===0)? 1 : Math.min(Math.max(1, minPos), Math.max(1, maxPos-4));
+
+    const w=320, h=220, m=22, rows=6, cols=5;
+    const gridW = w - m*2 - 16, gridH = h - m*2 - 24;
+    const colW = gridW/(cols), rowH = gridH/(rows-1);
+    const NS="http://www.w3.org/2000/svg";
+    const div = document.createElement("div"); div.className="diagram";
+    const svg = document.createElementNS(NS,"svg"); svg.setAttribute("viewBox",`0 0 ${w} ${h}`); svg.setAttribute("width","100%"); svg.setAttribute("height","100%");
+
+    const t = document.createElementNS(NS,"text"); t.setAttribute("x",m); t.setAttribute("y",14); t.setAttribute("class","posLabel"); t.textContent = title; svg.appendChild(t);
+    const posLab = document.createElementNS(NS,"text"); posLab.setAttribute("x", w-m); posLab.setAttribute("y", m); posLab.setAttribute("text-anchor","end"); posLab.setAttribute("class","posLabel");
+    posLab.textContent = (startF===1 && capo===0) ? "Nut" : `${startF}F` + (capo?` (Capo ${capo})`:""); svg.appendChild(posLab);
+
+    for(let r=0;r<rows;r++){
+      const y = m+5 + r*rowH;
+      const line = document.createElementNS(NS,"line"); line.setAttribute("x1", m); line.setAttribute("y1", y); line.setAttribute("x2", m + colW*cols); line.setAttribute("y2", y); line.setAttribute("class","string"); svg.appendChild(line);
+      const lab = document.createElementNS(NS,"text"); lab.setAttribute("x", m-6); lab.setAttribute("y", y+4); lab.setAttribute("text-anchor","end"); lab.setAttribute("class","axisLabel"); lab.textContent = (6 - r).toString(); svg.appendChild(lab);
+    }
+    for(let c=0;c<=cols;c++){
+      const x = m + c*colW;
+      const line = document.createElementNS(NS,"line"); line.setAttribute("x1", x); line.setAttribute("y1", m+5); line.setAttribute("x2", x); line.setAttribute("y2", m+5 + rowH*(rows-1)); line.setAttribute("class", c===0 && startF===1 && capo===0 ? "nut" : "fret"); svg.appendChild(line);
+      if (c>0){
+        const flab = document.createElementNS(NS,"text"); flab.setAttribute("x", x - colW/2); flab.setAttribute("y", h-6); flab.setAttribute("text-anchor","middle"); flab.setAttribute("class","axisLabel"); flab.textContent = (startF + c - 1) + "F"; svg.appendChild(flab);
+      }
+    }
+
+    for(let s=0;s<6;s++){
+      const f = frets[s];
+      const label = labels[s];
+      const color = colorLabels[s] || "dot";
+      const y = m+5 + (5 - s)*rowH;
+      const x0 = m;
+      if (f===null){
+        const tx = document.createElementNS(NS,"text"); tx.setAttribute("x", x0 - 10); tx.setAttribute("y", y+4); tx.setAttribute("text-anchor","end"); tx.setAttribute("class","xmark"); tx.textContent="x"; svg.appendChild(tx); continue;
+      }
+      const fillMap = { ct:"var(--ct)", ok:"var(--ok)", mid:"var(--mid)", avoid:"var(--avoid)" };
+      const fill = fillMap[color] || "var(--accent)";
+      if (f===0 && capo===0){
+        const cx = x0 + colW*0.15, cy = y;
+        const dot = document.createElementNS(NS,"circle"); dot.setAttribute("cx",cx); dot.setAttribute("cy",cy); dot.setAttribute("r",9); dot.setAttribute("fill",fill); svg.appendChild(dot);
+        const tx = document.createElementNS(NS,"text"); tx.setAttribute("x",cx); tx.setAttribute("y",cy+0.5); tx.setAttribute("class","dotText"); tx.textContent=label||"o"; svg.appendChild(tx);
+        continue;
+      }
+      const rel = (f===0? 1 : (f - startF + 1));
+      if (rel<1 || rel>5) continue;
+      const cx = x0 + (rel-0.5)*colW, cy = y;
+      const dot = document.createElementNS(NS,"circle"); dot.setAttribute("cx",cx); dot.setAttribute("cy",cy); dot.setAttribute("r",10); dot.setAttribute("fill",fill); svg.appendChild(dot);
+      const tx = document.createElementNS(NS,"text"); tx.setAttribute("x",cx); tx.setAttribute("y",cy+0.5); tx.setAttribute("class","dotText"); tx.textContent=label||""; svg.appendChild(tx);
+    }
+    const wrap = document.createElement("div"); wrap.className="diagram"; wrap.appendChild(svg); return wrap;
+  }
+
+  function chooseForms(rootIdx, qual, capo, cagedIndex){
+    const labelSharp = chordLabel(rootIdx, qual, "sharp");
+    if (capo===0 && OPEN_SHAPES[labelSharp]){
+      return {type:"open", shape: OPEN_SHAPES[labelSharp], title:"開放形（代表的）"};
+    }
+    const candidates = Object.keys(OPEN_SHAPES);
+    for (let base of candidates){
+      let baseQual=""; let baseRoot=base;
+      if (base.endsWith("maj7")){ baseQual="maj7"; baseRoot=base.slice(0,-5); }
+      else if (base.endsWith("m7")){ baseQual="m7"; baseRoot=base.slice(0,-2); }
+      else if (base.endsWith("7")){ baseQual="7"; baseRoot=base.slice(0,-1); }
+      else if (base.endsWith("m")){ baseQual="m"; baseRoot=base.slice(0,-1); }
+      else { baseQual=""; }
+      if (baseQual !== qual) continue;
+      const baseIdx = idxOf(baseRoot); if (baseIdx<0) continue;
+      if (clamp12(baseIdx + capo) === rootIdx){
+        return {type:"openCapo", shape: applyCapo(OPEN_SHAPES[base], capo), title:`開放形の移調（Capo ${capo}）`};
+      }
+    }
+    const preferZone = (cagedIndex%3===0)? 3 : (cagedIndex%3===1? 5 : 8);
+    const r6 = findFretForRoot(rootIdx, 6, preferZone);
+    const r5 = findFretForRoot(rootIdx, 5, preferZone);
+    function eShape(q){ switch(q){ case "":return barreE_Major(r6); case "m":return barreE_Minor(r6); case "7":return barreE_Dom7(r6); case "maj7":return barreE_Maj7(r6); case "m7":return barreE_m7(r6); case "m7b5":return barreE_m7b5(r6); case "dim":return barreE_dim(r6); default:return barreE_Major(r6);} }
+    function aShape(q){ switch(q){ case "":return barreA_Major(r5); case "m":return barreA_Minor(r5); case "7":return barreA_Dom7(r5); case "maj7":return barreA_Maj7(r5); case "m7":return barreA_m7(r5); case "m7b5":return barreA_m7b5(r5); case "dim":return barreA_dim(r5); default:return barreA_Major(r5);} }
+    return {type:"barre", shapeE: eShape(qual), shapeA: aShape(qual), title:"CAGEDフルバレー（E/A形）"};
+  }
+
+  function labelForSemiWrap(semi, mode){ return labelForSemi(semi, mode); }
+  function chordDegreesForShape(frets, rootIdx, capo, degMode){
+    const labs = new Array(6).fill(null);
+    for (let s=0; s<6; s++){
+      const f = frets[s];
+      if (f===null){ labs[s]=null; continue; }
+      const n = (f===0 && capo===0)? noteAt(s,0,0) : noteAt(s,f,capo);
+      labs[s] = labelForSemiWrap(n - rootIdx, degMode);
+    }
+    return labs;
+  }
+  function chordIntervals(qual, level){
+    let base;
+    switch(qual){
+      case "maj7": base=[0,4,7,11]; break;
+      case "m7": base=[0,3,7,10]; break;
+      case "7": base=[0,4,7,10]; break;
+      case "m7b5": base=[0,3,6,10]; break;
+      default: if (qual==="m") base=[0,3,7]; else if (qual==="dim") base=[0,3,6]; else base=[0,4,7];
+    }
+    if (level==="9th") base = base.concat([2]);
+    if (level==="11th") base = base.concat([2,5]);
+    if (level==="13th") base = base.concat([2,5,9]);
+    return new Set(base.map(x=>clamp12(x)));
+  }
+  function colorLabelsForShape(frets, rootIdx, chordIntervalsSemi, degreeIndex, qual, mode, colorMode){
+    const arr = new Array(6).fill(null);
+    for (let s=0; s<6; s++){
+      const f = frets[s];
+      if (f===null){ arr[s]=null; continue; }
+      const n = (f===0 && capo===0)? noteAt(s,0,0) : noteAt(s,f,capo);
+      const semi = clamp12(n - rootIdx);
+      if (chordIntervalsSemi.has(semi)){ arr[s] = "ct"; continue; }
+      if (colorMode==="none"){ arr[s]=null; continue; }
+      if (colorMode==="diatonic"){
+        const scale = buildScale(rootIdx, mode==="major"?"major":"minor");
+        const inScale = scale.includes(semi);
+        arr[s] = inScale ? "ok" : "avoid";
+      } else {
+        arr[s] = modeAdvice(degreeIndex, qual, semi);
+      }
+    }
+    return arr;
+  }
+
+  const PR = { noteHeight: 10, rowGap: 6, leftPad: 36, topPad: 14, width: 420, beatCols: 16, barColor: "#2b82ff", barStroke: "#1b4fa8", textFill: "#ffffff", fontSize: 10.5 };
+  function midiNoteName(idx){ const names=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]; const name=names[idx%12]; const octave=Math.floor(idx/12)-1; return `${name}${octave}`; }
+  function renderPianoRoll(title, midiNotes){
+    const sorted=[...midiNotes].sort((a,b)=>a-b);
+    const groups=[]; for(let n of sorted){ const g=groups.find(x=>x.pitch===n); if (g) g.count++; else groups.push({pitch:n,count:1}); }
+    const rows=groups.length; const height=PR.topPad + rows*(PR.noteHeight + PR.rowGap) + 24;
+    const NS="http://www.w3.org/2000/svg"; const div=document.createElement("div"); div.className="piano";
+    const svg=document.createElementNS(NS,"svg"); svg.setAttribute("viewBox",`0 0 ${PR.width} ${height}`); svg.setAttribute("width","100%"); svg.setAttribute("height","100%");
+    const t=document.createElementNS(NS,"text"); t.setAttribute("x",8); t.setAttribute("y",12); t.setAttribute("class","pr-title"); t.textContent=title; svg.appendChild(t);
+    const gridW=PR.width - PR.leftPad - 10; const x0=PR.leftPad, y0=PR.topPad;
+    for(let i=0;i<rows;i++){ const y=y0 + i*(PR.noteHeight + PR.rowGap); const pitch=groups[i].pitch; const isC=(pitch%12)===0;
+      const line=document.createElementNS(NS,"line"); line.setAttribute("x1",x0); line.setAttribute("x2",x0+gridW);
+      line.setAttribute("y1",y + PR.noteHeight + PR.rowGap/2); line.setAttribute("y2",y + PR.noteHeight + PR.rowGap/2);
+      line.setAttribute("class", isC? "octLine":"keyLine"); svg.appendChild(line);
+      const lab=document.createElementNS(NS,"text"); lab.setAttribute("x", x0-6); lab.setAttribute("y", y + PR.noteHeight/2 + 0.5); lab.setAttribute("text-anchor","end"); lab.setAttribute("class","noteLabel"); lab.textContent=midiNoteName(pitch); svg.appendChild(lab);
+    }
+    for(let i=0;i<rows;i++){ const pitch=groups[i].pitch; const count=groups[i].count;
+      for(let k=0;k<count;k++){ const y=y0 + i*(PR.noteHeight + PR.rowGap) + k*2;
+        const rect=document.createElementNS(NS,"rect"); rect.setAttribute("x",x0); rect.setAttribute("y",y); rect.setAttribute("width",gridW); rect.setAttribute("height",PR.noteHeight); rect.setAttribute("fill",PR.barColor); rect.setAttribute("stroke",PR.barStroke); svg.appendChild(rect);
+        const tx=document.createElementNS(NS,"text"); tx.setAttribute("x", x0 + gridW/2); tx.setAttribute("y", y + PR.noteHeight/2 + 0.5); tx.setAttribute("class","noteLabel"); tx.setAttribute("font-size", PR.fontSize); tx.textContent=midiNoteName(pitch); svg.appendChild(tx);
+      }
+    }
+    div.appendChild(svg); return div;
+  }
+  function midiFromGuitarShape(frets, capo){
+    const openMidi=[40,45,50,55,59,64]; const arr=[];
+    for(let s=0;s<6;s++){ const f=frets[s]; if (f===null) continue; const add=(f===0?0:f)+(capo||0); arr.push(openMidi[s]+add); }
+    return arr;
+  }
+  function renderChordBlock(formsDiv, title, shape, rootIdx, capo, degMode, qual, level, i, mode){
+    const labs = chordDegreesForShape(shape, rootIdx, capo, degMode);
+    const chordSet = chordIntervals(qual, level);
+    const colors = colorLabelsForShape(shape, rootIdx, chordSet, i, qual, mode, document.getElementById("colorMode").value);
+    formsDiv.appendChild(renderChordDiagram(title, shape, labs, colors, capo));
+    const midi = midiFromGuitarShape(shape, capo);
+    formsDiv.appendChild(renderPianoRoll("ピアノロール（ギターフォーム反映）", midi));
+  }
+
+  const keySel = document.getElementById("keySel");
+  const modeSel = document.getElementById("modeSel");
+  const chSel   = document.getElementById("chSel");
+  const enhSel  = document.getElementById("enhSel");
+  const capoSel = document.getElementById("capo");
+  const degModeSel = document.getElementById("degMode");
+  const colorModeSel = document.getElementById("colorMode");
+  const out = document.getElementById("output");
+  const renderBtn = document.getElementById("renderBtn");
+  const posBtn = document.getElementById("posBtn");
+
+  for (let k of ["C","G","D","A","E","B","F#","C#","F","Bb","Eb","Ab","Db","Gb","Cb"]){ const o=document.createElement("option"); o.value=k; o.textContent=k; keySel.appendChild(o); }
+  keySel.value="C";
+  for (let i=0;i<=7;i++){ const o=document.createElement("option"); o.value=i; o.textContent=i.toString(); capoSel.appendChild(o); }
+  capoSel.value="0";
+
+  let cagedIndex=0;
+  posBtn.addEventListener("click", ()=>{ cagedIndex=(cagedIndex+1)%6; render(); });
+  renderBtn.addEventListener("click", render);
+  degModeSel.addEventListener("change", render);
+  colorModeSel.addEventListener("change", render);
+
+  function render(){
+    out.innerHTML="";
+    const key = keySel.value;
+    const mode = modeSel.value;
+    const level = chSel.value;
+    const capo = parseInt(capoSel.value,10);
+    const pref = enhPref(key, enhSel.value);
+    const degMode = degModeSel.value;
+    const keyIdx = idxOf(key);
+    const scale = buildScale(keyIdx, mode);
+    const quals = degreeQual(mode);
+    const romans = degreeRoman(mode);
+
+    scale.forEach((rootIdx, i)=>{
+      const qual = quals[i];
+      const rn = romans[i] + (qual==="maj7"?"△7": qual==="7"?"7": qual==="m7"?"m7": qual==="m7b5"?"ø7":"");
+      const label = chordLabel(rootIdx, qual, pref) + (level==="triad"?"": level==="7th"?"": level==="9th"?" add9": level==="11th"?" add11":" add13");
+
+      const row = document.createElement("div"); row.className="row";
+      const head = document.createElement("div"); head.className="head";
+      const d = document.createElement("div"); d.className="deg"; d.textContent = rn;
+      const ch = document.createElement("div"); ch.className="chname"; ch.textContent = label;
+      const b = document.createElement("div"); b.className="badge"; b.textContent = level.toUpperCase();
+      head.appendChild(d); head.appendChild(ch); head.appendChild(b);
+      row.appendChild(head);
+
+      const pick = chooseForms(rootIdx, qual, capo, cagedIndex);
+      const sub = document.createElement("div"); sub.className="badge"; sub.textContent = pick.title;
+      row.appendChild(sub);
+
+      const formsDiv = document.createElement("div"); formsDiv.className="forms";
+      if (pick.type==="open" || pick.type==="openCapo"){
+        renderChordBlock(formsDiv, "開放形（またはCapo移調）", pick.shape, rootIdx, capo, degMode, qual, level, i, mode);
+      } else {
+        renderChordBlock(formsDiv, "6弦Root：E形フルバレー", pick.shapeE, rootIdx, capo, degMode, qual, level, i, mode);
+        renderChordBlock(formsDiv, "5弦Root：A形フルバレー", pick.shapeA, rootIdx, capo, degMode, qual, level, i, mode);
+      }
+
+      row.appendChild(formsDiv);
+      out.appendChild(row);
+    });
+  }
+  render();
+})();
+</script>
+</body>
+</html>
